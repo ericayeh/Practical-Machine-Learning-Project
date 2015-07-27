@@ -1,0 +1,123 @@
+---
+title: "Practical Machine Learning Project"
+author: "Eric"
+date: "Sunday, July 26, 2015"
+output: html_document
+---
+
+# Background and Sypnosis
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit, it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+The goal of this project is thus to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to determine whether they are performing specific exercises correctly. In fact, they were asked to perform barbell lifts correctly and incorrectly in 5 different ways as specified below.  
+
+1. Exactly according to the specification - (Class A)
+2. Throwing the elbows to the front - (Class B)
+3. Lifting the dumbbell only halfway - (Class C) 
+4. Lowering the dumbbell only halfway - (Class D) 
+5. Throwing the hips to the front - (Class E)
+
+Two sets (training and testing) of data are provided. Using the training data, we will develop a model that could then be used on the testing data set to determine the class of the excercises being performed by the participants.
+
+**Note:**Additioal information about the data used in this project are available at <http://groupware.les.inf.puc-rio.br/har>, and comments are inserted throughout the code to explain what is being done.
+
+
+# Analysis
+First, let's download and load the data.
+```{r}
+# Links to download the data
+trainLink <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testLink <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+# Downloading the data - Note that you may have to create a "data" folder in your working directory
+# if one isn't already there.
+#download.file(trainLink, destfile = "./data/train.csv")
+#download.file(testLink, destfile = "./data/test.csv")
+
+# Reading the downloaded data - Replacing the missing values with NAs
+# A look at the data shows that it contains entry such as "#DIV/0!", thus the following code
+trainData <- read.csv("./data/train.csv", na.strings=c("NA","NaN","#DIV/0!", ""), sep = ",", header=TRUE)
+testData <- read.csv("./data/test.csv", na.strings=c("NA","NaN","#DIV/0!", ""), sep = ",", header=TRUE)
+
+# Analyzing the data 
+dim(trainData); dim(testData)
+head(trainData); names(trainData)
+```
+The testing data contains 19622 entries and 160 variables. The testing data on the other hand only has 20 entries.
+A look at the variables shows that some of them such as "user_name" will not have any contribution to the analysis. We will therefore restructure the data as follows.
+
+
+```{r}
+# Restructuring the data - some of the variables do not contribute to the analysis.
+trainData <- trainData[, -c(1:7)]
+testData <- testData[, -c(1:7)]
+
+# Loading required libraries.
+library(caret); library(rpart); library(ggplot2); library(rattle)
+library(rpart.plot); library(caTools); library(randomForest)
+
+# Removing more variables that aren't used in the analysis - these variables are NAs or equal to 0.
+rmv <- nearZeroVar(trainData)
+trainData <- trainData[, -rmv]
+testData <- testData[, -rmv]
+
+# A look at the data shows that there are more variables that are simply NAs.
+trainData <- trainData[, colSums(is.na(trainData)) == 0]
+testData <- testData[, colSums(is.na(testData)) == 0]
+
+```
+
+The restructuring of the data reduces the number of variables/columns from 160 to 53. Further analyses 
+could be done to reduce the number of variables.
+
+Now let's perform a recursive partitioning for classification.
+
+```{r}
+# Setting the seed for reproducibility
+set.seed(3333)
+
+# Since the training data is quite large, let's partition it to allow for cross-validation.
+split <- sample.split(trainData$classe, SplitRatio = 0.7)
+training <- subset(trainData, split==TRUE)
+testing <- subset(trainData, split==FALSE)
+
+# Constructing the model
+modelfit1 <- rpart(classe ~ ., data=training, , method="class")
+
+# Plotting the tree
+prp(modelfit1)
+fancyRpartPlot(modelfit1) # To get a better tree but the result is not annotated. 
+
+# First prediction on the sample test data obtained from the training data
+prediction1 <- predict(modelfit1, testing, type="class")
+
+# Testing the results of the first prediction on the sample testing data
+confusionMatrix(prediction1, testing$classe)
+```
+The results of the confusion matrix for the recursive partitioning show the accuracy of this method is **75.4%**
+
+Given that Random Forest is one of the most accurate classifiers, let's predict the classification model using Random Forrest as follows.
+
+```{r}
+# Performing another fit to see if a better accuracy could be attained.
+modelfit2 <- randomForest(classe ~ . , data=training, method="class")
+
+# Second prediction on the sample test data obtained from the training data
+prediction2 <- predict(modelfit2, testing, type="class")
+
+# Testing the results of the first prediction on the sample testing data
+confusionMatrix(prediction2, testing$classe)
+```
+As expected, the results of the confusion matrix test show that Random Forrest provides a better and almost perfect accuracy. In fact, the obtained accuracy is **99.29%**.
+
+Based on these results, the Random Forest model is used for prediction on the testing sample data provided.
+```{r}
+# Based on the obtained results, Random Forest has a better performance and thus will
+# be used on the actual testing data
+finalPrediction <- predict(modelfit2, testData, type="class")
+finalPrediction
+```
+
+The results are then submitted using the provided function (pml_write_files()). After verification, none of the sample data were misclassified.
+
+
+
